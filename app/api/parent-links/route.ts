@@ -13,7 +13,7 @@ import {
   revokeParentChildLink,
   revokeStudentQrTokens,
 } from '@/lib/server/qr'
-import { fail, ok, readJson } from '@/lib/server/http'
+import { databaseUnavailable, fail, ok, readJson } from '@/lib/server/http'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,7 +51,8 @@ function getStudentIdentity(stored: NonNullable<ReturnType<typeof readWorkspace>
 export async function GET() {
   const auth = await getAuthContext()
   if (!auth) return fail(401, 'unauthorized')
-  const stored = readWorkspace()
+  let stored
+  try { stored = readWorkspace() } catch (error) { return databaseUnavailable(error, '/api/parent-links') }
   if (!stored) return fail(409, 'setup_required')
   const user = stored.data.users.find(row => row.id === auth.auth.id && row.status === 'active')
   if (!user || user.role !== auth.role) return fail(403, 'inactive_user')
@@ -67,7 +68,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const auth = await getAuthContext()
   if (!auth) return fail(401, 'unauthorized')
-  const stored = readWorkspace()
+  let stored
+  try { stored = readWorkspace() } catch (error) { return databaseUnavailable(error, '/api/parent-links') }
   if (!stored) return fail(409, 'setup_required')
   const user = stored.data.users.find(row => row.id === auth.auth.id && row.status === 'active')
   if (!user || user.role !== auth.role) return fail(403, 'inactive_user')

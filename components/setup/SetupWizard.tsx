@@ -130,9 +130,11 @@ export function SetupWizard() {
         body: JSON.stringify(payload),
       })
 
-      const json = await res.json()
-      if (!res.ok || !json.ok) {
-        setError(json.error || (ar ? 'تعذر إتمام الإعداد الأولي، يرجى التحقق من البيانات.' : 'Setup failed. Please verify inputs.'))
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.ok) {
+        setError(res.status >= 500
+          ? (ar ? 'خادم المدرسة أو قاعدة البيانات غير متاحين الآن. لم يتم إنشاء الحساب. راجع إعداد قاعدة البيانات في الاستضافة.' : 'The school server or database is unavailable. The account was not created. Check the hosting database configuration.')
+          : json?.error || (ar ? 'تعذر إتمام الإعداد الأولي، يرجى التحقق من البيانات.' : 'Setup failed. Please verify inputs.'))
         setLoading(false)
         return
       }

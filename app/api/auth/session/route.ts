@@ -1,6 +1,6 @@
 import { clearSessionCookie, getAuthContext } from '@/lib/server/auth'
 import { deleteSession, readWorkspace } from '@/lib/server/db'
-import { ok, NO_STORE } from '@/lib/server/http'
+import { ok, NO_STORE, databaseUnavailable } from '@/lib/server/http'
 import { scopeWorkspace } from '@/lib/server/scope'
 import { homePageFor } from '@/lib/school/engine'
 import { NextResponse } from 'next/server'
@@ -8,7 +8,8 @@ import { NextResponse } from 'next/server'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const stored = readWorkspace()
+  let stored
+  try { stored = readWorkspace() } catch (error) { return databaseUnavailable(error, '/api/auth/session') }
   if (!stored) {
     return NextResponse.json(
       { ok: true, setupRequired: true, authenticated: false, user: null, workspace: null, rev: 0, home: null },

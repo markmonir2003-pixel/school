@@ -19,6 +19,12 @@ export function fail(status: number, error: string, extra: Record<string, unknow
   return NextResponse.json({ ok: false, error, ...extra }, { status, headers: NO_STORE })
 }
 
+/** Converts infrastructure failures into a stable API response while keeping details server-side. */
+export function databaseUnavailable(error: unknown, route: string) {
+  console.error(`[${route}] database unavailable`, error)
+  return fail(503, 'database_unavailable')
+}
+
 export async function readJson<T>(request: Request): Promise<T | null> {
   try {
     return (await request.json()) as T

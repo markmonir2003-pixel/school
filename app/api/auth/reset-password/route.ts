@@ -1,6 +1,6 @@
 import { createPasswordReset, getAuthByEmail, getPasswordResetByToken, markPasswordResetUsed, readWorkspace, updateAuthPassword } from '@/lib/server/db'
 import { hashPassword, passwordProblem } from '@/lib/server/auth'
-import { fail, ok, readJson } from '@/lib/server/http'
+import { databaseUnavailable, fail, ok, readJson } from '@/lib/server/http'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +11,8 @@ interface ResetBody {
 }
 
 export async function POST(request: Request) {
-  const stored = readWorkspace()
+  let stored
+  try { stored = readWorkspace() } catch (error) { return databaseUnavailable(error, '/api/auth/reset-password') }
   if (!stored) return fail(409, 'setup_required')
 
   const body = await readJson<ResetBody>(request)

@@ -197,9 +197,9 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, role }),
       })
-      const json = await res.json()
-      if (!res.ok || !json.ok) {
-        return { ok: false, error: json.error || 'login_failed' }
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.ok) {
+        return { ok: false, error: res.status >= 500 ? 'server_unavailable' : json?.error || 'login_failed' }
       }
       setUser(json.user)
       setData(json.workspace)
@@ -231,12 +231,12 @@ export function SchoolProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, payload }),
       })
-      const json = await res.json()
-      if (res.ok && json.ok && json.workspace) {
+      const json = await res.json().catch(() => null)
+      if (res.ok && json?.ok && json.workspace) {
         setData(json.workspace)
         return { ok: true, ...json.result }
       }
-      return { ok: false, error: json.error || 'mutation_failed' }
+      return { ok: false, error: res.status >= 500 ? 'server_unavailable' : json?.error || 'mutation_failed' }
     } catch {
       return { ok: false, error: 'network_error' }
     }

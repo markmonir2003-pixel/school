@@ -90,7 +90,11 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
     const result = await login(email.trim(), password, selectedRole)
     if (!result.ok) {
       setError(
-        result.error === 'role_mismatch'
+        result.error === 'server_unavailable'
+          ? (ar ? 'خدمة المدرسة أو قاعدة البيانات غير متاحة الآن. تعذر تسجيل الدخول.' : 'The school service or database is unavailable. Sign-in could not be completed.')
+          : result.error === 'network_error'
+            ? (ar ? 'تعذر الاتصال بخادم المدرسة. تحقق من الاتصال وحاول مرة أخرى.' : 'Could not reach the school server. Check your connection and try again.')
+        : result.error === 'role_mismatch'
           ? (ar ? 'نوع الحساب المختار لا يطابق هذا البريد الإلكتروني.' : 'The selected account type does not match this email.')
           : result.error === 'inactive_user' || result.error === 'account_inactive'
           ? (ar ? 'هذا الحساب غير مفعّل. يرجى مراجعة إدارة مدرسة سان جورج.' : 'This account is inactive. Please contact St. George administration.')
@@ -128,8 +132,12 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
           subjectCodes: selectedRole === 'teacher' && registerSubject.startsWith('catalog:') ? [registerSubject.slice('catalog:'.length)] : undefined,
         }),
       })
-      const result = await response.json()
+      const result = await response.json().catch(() => null)
       if (!response.ok || !result.ok) {
+        if (response.status >= 500) {
+          setError(ar ? 'خدمة المدرسة أو قاعدة البيانات غير متاحة الآن. لم يتم إنشاء الحساب.' : 'The school service or database is unavailable. The account was not created.')
+          return
+        }
         if (result.error === 'manager_account_exists') {
           setManagerSetupMode('none')
           setRegisterOpen(false)
@@ -180,7 +188,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: resetEmail.trim() }),
       })
-      const json = await res.json()
+      const json = await res.json().catch(() => null)
       if (res.ok && json.ok) {
         if (json.resetToken) {
           setResetToken(json.resetToken)
@@ -193,7 +201,9 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
           )
         }
       } else {
-        setResetError(json.error || (ar ? 'تعذر إرسال طلب إعادة التعيين.' : 'Failed to dispatch reset request.'))
+        setResetError(res.status >= 500
+          ? (ar ? 'خدمة المدرسة أو قاعدة البيانات غير متاحة الآن. تعذرت استعادة كلمة المرور.' : 'The school service or database is unavailable. Password recovery failed.')
+          : json?.error || (ar ? 'تعذر إرسال طلب إعادة التعيين.' : 'Failed to dispatch reset request.'))
       }
     } catch {
       setResetError(ar ? 'خطأ في الاتصال بالخادم.' : 'Server connection error.')
@@ -216,9 +226,11 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: resetToken, newPassword: newResetPassword }),
       })
-      const result = await response.json()
+      const result = await response.json().catch(() => null)
       if (!response.ok || !result.ok) {
-        setResetError(result.error === 'weak_password'
+        setResetError(response.status >= 500
+          ? (ar ? 'خدمة المدرسة أو قاعدة البيانات غير متاحة الآن. لم تتغير كلمة المرور.' : 'The school service or database is unavailable. The password was not changed.')
+          : result?.error === 'weak_password'
           ? (ar ? 'كلمة المرور يجب أن تكون ٨ أحرف على الأقل وتحتوي على حرف ورقم.' : 'Password must be at least 8 characters and include a letter and a number.')
           : (ar ? 'انتهت صلاحية رابط الاستعادة أو تعذر استخدامه. ابدأ طلبًا جديدًا.' : 'The reset link expired or could not be used. Start a new request.'))
         return

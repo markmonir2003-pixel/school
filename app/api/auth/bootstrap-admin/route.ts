@@ -1,7 +1,7 @@
 import { createAuthUser, createSession, getDb, readWorkspace, saveWorkspace, updateAuthEmail, updateAuthPassword } from '@/lib/server/db'
 import { clearLoginFailures, hashPassword, loginThrottled, passwordProblem, recordLoginFailure, setSessionCookie } from '@/lib/server/auth'
 import { addAudit, isValidEmail, newId, nowIso } from '@/lib/server/domain'
-import { fail, ok, readJson, NO_STORE } from '@/lib/server/http'
+import { databaseUnavailable, fail, ok, readJson, NO_STORE } from '@/lib/server/http'
 import { scopeWorkspace } from '@/lib/server/scope'
 import type { User } from '@/lib/school/types'
 
@@ -34,8 +34,12 @@ function getAdminSetupMode() {
 }
 
 export async function GET() {
-  const stored = readWorkspace()
-  const mode = getAdminSetupMode()
+  let stored
+  let mode
+  try {
+    stored = readWorkspace()
+    mode = getAdminSetupMode()
+  } catch (error) { return databaseUnavailable(error, '/api/auth/bootstrap-admin') }
   return Response.json(
     { ok: true, allowed: Boolean(stored) && mode !== null, mode },
     { headers: NO_STORE },
@@ -57,7 +61,8 @@ export async function POST(request: Request) {
   const weak = passwordProblem(password)
   if (weak) return fail(400, weak)
 
-  const db = getDb()
+  let db
+  try { db = getDb() } catch (error) { return databaseUnavailable(error, '/api/auth/bootstrap-admin') }
   db.exec('BEGIN IMMEDIATE')
   try {
     const stored = readWorkspace()

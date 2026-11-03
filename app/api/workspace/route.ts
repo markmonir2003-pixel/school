@@ -1,7 +1,7 @@
 import { getAuthContext, hashPassword, passwordProblem } from '@/lib/server/auth'
 import { mutateWorkspace, readWorkspace, createAuthUser, updateAuthEmail, updateAuthPassword, updateAuthStatus } from '@/lib/server/db'
 import { addAudit, isValidEmail, newId, nextStudentNumber, nowIso } from '@/lib/server/domain'
-import { fail, ok, readJson } from '@/lib/server/http'
+import { databaseUnavailable, fail, ok, readJson } from '@/lib/server/http'
 import { isAdmin, scopeWorkspace } from '@/lib/server/scope'
 import { buildAlerts } from '@/lib/school/engine'
 import type {
@@ -30,7 +30,8 @@ interface WorkspaceAction {
 }
 
 export async function GET() {
-  const stored = readWorkspace()
+  let stored
+  try { stored = readWorkspace() } catch (error) { return databaseUnavailable(error, '/api/workspace') }
   if (!stored) return fail(409, 'setup_required')
 
   const auth = await getAuthContext()
@@ -47,7 +48,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const stored = readWorkspace()
+  let stored
+  try { stored = readWorkspace() } catch (error) { return databaseUnavailable(error, '/api/workspace') }
   if (!stored) return fail(409, 'setup_required')
 
   const auth = await getAuthContext()

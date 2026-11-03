@@ -1,7 +1,7 @@
 import { createAuthUser, createSession, createWorkspace, getDb, getAuthByEmail, readWorkspace } from '@/lib/server/db'
 import { hashPassword, passwordProblem, setSessionCookie } from '@/lib/server/auth'
 import { addAudit, isValidEmail, newId, nowIso } from '@/lib/server/domain'
-import { fail, ok, readJson } from '@/lib/server/http'
+import { databaseUnavailable, fail, ok, readJson } from '@/lib/server/http'
 import { scopeWorkspace } from '@/lib/server/scope'
 import { createEmptyWorkspace } from '@/lib/school/empty'
 import type { AcademicYear, ClassRoom, Subject, Term, User } from '@/lib/school/types'
@@ -37,7 +37,8 @@ interface SetupBody {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export async function POST(request: Request) {
-  const db = getDb()
+  let db
+  try { db = getDb() } catch (error) { return databaseUnavailable(error, '/api/setup') }
   db.exec('BEGIN IMMEDIATE')
   try {
     if (readWorkspace()) {

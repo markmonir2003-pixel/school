@@ -1,11 +1,12 @@
 import { readWorkspace } from '@/lib/server/db'
-import { ok, fail, NO_STORE } from '@/lib/server/http'
+import { ok, fail, NO_STORE, databaseUnavailable } from '@/lib/server/http'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const stored = readWorkspace()
+  let stored
+  try { stored = readWorkspace() } catch (error) { return databaseUnavailable(error, '/api/public') }
   if (!stored) {
     return NextResponse.json(
       { ok: true, setupRequired: true, publicData: null },

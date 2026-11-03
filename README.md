@@ -11,7 +11,7 @@ St. George School Digital Campus provides a unified, secure academic environment
 
 The platform is **100% database-driven**:
 - **Zero fake/demo data**: The application begins with a clean, empty database.
-- **Persistent storage**: All users, records, attendance logs, marks, assignments, and audit events are stored in a persistent SQLite database (`data/school.db`).
+- **Persistent storage**: All users, records, attendance logs, marks, assignments, and audit events are stored in SQLite (`data/school.db`) when running on a host with a persistent writable disk.
 - **Real authentication**: Passwords are hashed with `scrypt` using cryptographic salts. Sessions are stored in a database `sessions` table and verified on every server request.
 - **Admin Setup Wizard**: On first run, the system prompts the school administrator to configure school identity, academic years, curriculum, and the first Super Administrator account. Once setup completes, the wizard is locked permanently.
 - **Public CMS**: Includes a public portal for St. George School (Admissions, Academics, Student Life, News & Events, Digital Library catalog, Contact) manageable directly from the admin dashboard.
@@ -33,7 +33,7 @@ The platform is **100% database-driven**:
 ## 3. Local Installation
 
 ### Prerequisites
-- Node.js 20.x or higher
+- Node.js 22.5 or higher (required by the built-in `node:sqlite` module)
 - npm 10 or newer
 
 ### Quick Start
@@ -144,16 +144,17 @@ The platform implements 9 database-backed user roles with strict server-side and
 
 ## 7. Production Deployment & Security Recommendations
 
-1. **Environment Variables**:
+1. **Hosting requirement — read before deploying**: This app currently stores data in a local SQLite file. Deploy it only to a single Node.js server with a persistent writable disk. Vercel serverless functions do not provide the shared persistent filesystem this database requires, so setup, registration, and login will fail or lose data there. A durable shared database (for example, PostgreSQL) and an application database adapter are required before using Vercel in production; setting `SCHOOL_DB_PATH` to `/tmp` is not a durable fix.
+2. **Environment Variables**:
    - Ensure `NODE_ENV=production`.
    - Set a strong `SESSION_SECRET` (at least 32 characters).
    - Point `SCHOOL_DB_PATH` to a persistent volume (e.g. `/var/data/school.db`).
 
-2. **File Permissions**:
+3. **File Permissions**:
    - Protect the SQLite database file permissions (`chmod 600 /var/data/school.db`).
    - Run the application under an unprivileged system user.
 
-3. **Backup Strategy**:
+4. **Backup Strategy**:
    - SQLite supports atomic online backups using SQLite's backup API or copying the database while taking a short write lock:
      ```bash
      sqlite3 data/school.db ".backup 'backups/school-backup-$(date +%Y%m%d).db'"

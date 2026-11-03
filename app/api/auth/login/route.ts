@@ -7,7 +7,7 @@ import {
 } from '@/lib/server/auth'
 import { createSession, getAuthByEmail, mutateWorkspace, readWorkspace } from '@/lib/server/db'
 import { addAudit } from '@/lib/server/domain'
-import { fail, ok, readJson } from '@/lib/server/http'
+import { databaseUnavailable, fail, ok, readJson } from '@/lib/server/http'
 import { scopeWorkspace } from '@/lib/server/scope'
 import { homePageFor } from '@/lib/school/engine'
 
@@ -20,7 +20,8 @@ interface LoginBody {
 }
 
 export async function POST(request: Request) {
-  const stored = readWorkspace()
+  let stored
+  try { stored = readWorkspace() } catch (error) { return databaseUnavailable(error, '/api/auth/login') }
   if (!stored) return fail(409, 'setup_required')
 
   const body = await readJson<LoginBody>(request)

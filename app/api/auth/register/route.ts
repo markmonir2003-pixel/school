@@ -1,7 +1,7 @@
 import { hashPassword, loginThrottled, passwordProblem, recordLoginFailure } from '@/lib/server/auth'
 import { createAuthUser, getAuthByEmail, getDb, readWorkspace, saveWorkspace } from '@/lib/server/db'
 import { addAudit, isValidEmail, newId, nowIso } from '@/lib/server/domain'
-import { fail, ok, readJson } from '@/lib/server/http'
+import { databaseUnavailable, fail, ok, readJson } from '@/lib/server/http'
 import type { Parent, Role, Teacher, User } from '@/lib/school/types'
 import { COMMON_SCHOOL_SUBJECTS } from '@/lib/school/subjects'
 
@@ -43,7 +43,8 @@ export async function POST(request: Request) {
   const weak = passwordProblem(password)
   if (weak) return fail(400, weak)
 
-  const db = getDb()
+  let db
+  try { db = getDb() } catch (error) { return databaseUnavailable(error, '/api/auth/register') }
   db.exec('BEGIN IMMEDIATE')
   try {
     const stored = readWorkspace()
