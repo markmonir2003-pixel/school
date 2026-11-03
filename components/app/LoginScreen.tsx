@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -34,6 +34,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
   const [loading, setLoading] = useState(false)
   const [selectedRole, setSelectedRole] = useState<'student' | 'parent' | 'teacher' | 'super_admin'>('student')
   const [registerOpen, setRegisterOpen] = useState(false)
+  const [managerSetupAllowed, setManagerSetupAllowed] = useState(false)
   const [registerNameAr, setRegisterNameAr] = useState('')
   const [registerNameEn, setRegisterNameEn] = useState('')
   const [registerPhone, setRegisterPhone] = useState('')
@@ -50,6 +51,15 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
   const [resetError, setResetError] = useState('')
 
   const settings = data?.settings
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/auth/bootstrap-admin', { cache: 'no-store' })
+      .then(response => response.json())
+      .then(result => { if (active) setManagerSetupAllowed(result.allowed === true) })
+      .catch(() => { if (active) setManagerSetupAllowed(false) })
+    return () => { active = false }
+  }, [])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -83,14 +93,13 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
     e.preventDefault()
     setError('')
     setRegisterSuccess('')
-    if (selectedRole === 'super_admin') return
     if (selectedRole === 'teacher' && !registerSubject) {
       setError(ar ? 'اختر المادة التي تدرسها.' : 'Choose the subject you teach.')
       return
     }
     setLoading(true)
     try {
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch(selectedRole === 'super_admin' ? '/api/auth/bootstrap-admin' : '/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,6 +116,12 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
       })
       const result = await response.json()
       if (!response.ok || !result.ok) {
+        if (result.error === 'manager_account_exists') {
+          setManagerSetupAllowed(false)
+          setRegisterOpen(false)
+          setError(ar ? 'تم إنشاء حساب المدير بالفعل. سجّل الدخول بالبريد الذي استُخدم عند الإعداد.' : 'A manager account already exists. Sign in with the email used during setup.')
+          return
+        }
         setError(result.error === 'student_profile_already_linked'
           ? (ar ? 'ملف الطالب مرتبط بحساب آخر بالفعل. تواصل مع مدير المدرسة.' : 'This student profile is already linked to another account. Contact the school administrator.')
           : result.error === 'email_taken'
@@ -114,6 +129,15 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
             : result.error === 'weak_password'
               ? (ar ? 'كلمة المرور يجب أن تكون ٨ أحرف على الأقل وتحتوي على حرف ورقم.' : 'Password must be at least 8 characters and include a letter and a number.')
               : (ar ? 'تعذر إرسال طلب الحساب. راجع البيانات وحاول مرة أخرى.' : 'Could not submit the account request. Check your details and try again.'))
+        return
+      }
+      if (selectedRole === 'super_admin') {
+        setManagerSetupAllowed(false)
+        setRegisterOpen(false)
+        const signedIn = await login(email.trim(), password, 'super_admin')
+        if (!signedIn.ok) {
+          setError(ar ? 'تم إنشاء حساب المدير. سجّل الدخول بالبريد وكلمة المرور اللذين اخترتهما.' : 'The manager account was created. Sign in with the email and password you chose.')
+        }
         return
       }
       setRegisterSuccess(ar ? 'وصل طلبك إلى مدير المدرسة للمراجعة. يمكنك تسجيل الدخول بعد الموافقة.' : 'Your request was sent to the school administrator. You can sign in after approval.')
@@ -246,12 +270,16 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
 
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               {registerOpen
-                ? (ar ? 'طلب إنشاء حساب' : 'Request an account')
+                ? selectedRole === 'super_admin'
+                  ? (ar ? 'إنشاء حساب المدير الأول' : 'Create the first manager account')
+                  : (ar ? 'طلب إنشاء حساب' : 'Request an account')
                 : (ar ? 'تسجيل الدخول إلى البوابة' : 'Sign in to Digital Campus')}
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-2">
               {registerOpen
-                ? (ar ? 'تُراجع الإدارة الطلبات قبل تفعيل الحساب.' : 'The administrator reviews requests before activating accounts.')
+                ? selectedRole === 'super_admin'
+                  ? (ar ? 'أنشئ البريد وكلمة المرور الخاصة بك. الخيار متاح مرة واحدة فقط إذا لم يوجد حساب مدير.' : 'Choose your email and password. This one-time option appears only when no manager account exists.')
+                  : (ar ? 'تُراجع الإدارة الطلبات قبل تفعيل الحساب.' : 'The administrator reviews requests before activating accounts.')
                 : (ar ? 'اختر نوع الحساب ثم أدخل بيانات الدخول الخاصة به.' : 'Choose your account type, then enter its credentials.')}
             </p>
           </div>
@@ -268,7 +296,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
               return <button
                 type="button"
                 key={option.id}
-                onClick={() => { setSelectedRole(option.id); setError(''); setRegisterSuccess(''); if (option.id === 'super_admin') setRegisterOpen(false) }}
+                onClick={() => { setSelectedRole(option.id); setError(''); setRegisterSuccess(''); setRegisterOpen(false) }}
                 className={`flex items-center gap-2.5 rounded-xl border p-3 text-left transition-colors ${selected ? 'border-[#c5a059] bg-[#c5a059]/10 text-white' : 'border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]'}`}
               >
                 <Icon className={`size-4 shrink-0 ${selected ? 'text-[#c5a059]' : 'text-slate-400'}`} />
@@ -276,6 +304,24 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
               </button>
             })}
           </div>
+
+          {selectedRole === 'super_admin' && !registerOpen && managerSetupAllowed && (
+            <div className="mb-5 rounded-2xl border border-[#c5a059]/25 bg-[#c5a059]/[0.07] p-4">
+              <p className="text-xs font-bold text-white">{ar ? 'أول مرة تستخدم النظام؟' : 'First time setting up the school?'}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                {ar ? 'لا يوجد حساب مدير بعد. أنشئ الحساب الأول بالبريد وكلمة المرور الخاصين بك.' : 'No manager account exists yet. Create the first one with your own email and password.'}
+              </p>
+              <button type="button" onClick={() => { setRegisterOpen(true); setError('') }} className="mt-3 w-full rounded-xl bg-gradient-to-r from-[#c5a059] to-[#9a7836] px-4 py-2.5 text-xs font-black text-[#071120] transition hover:brightness-110">
+                {ar ? 'إنشاء حساب المدير الأول' : 'Create first manager account'}
+              </button>
+            </div>
+          )}
+
+          {selectedRole === 'super_admin' && !registerOpen && !managerSetupAllowed && (
+            <div className="mb-5 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3.5 py-3 text-[11px] leading-relaxed text-slate-400">
+              {ar ? 'حساب المدير لا يُنشأ من طلب التسجيل العادي. استخدم البريد الذي تم تسجيله عند إعداد المدرسة.' : 'Manager accounts are not created through public registration. Sign in with the email used during school setup.'}
+            </div>
+          )}
 
           {registerSuccess && <div role="status" className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-300">{registerSuccess}</div>}
 
@@ -308,7 +354,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
             <input type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} placeholder={ar ? 'كلمة مرور (٨ أحرف على الأقل وحرف ورقم)' : 'Password (8+ characters, letter and number)'} className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#c5a059]" />
             <div className="flex gap-2">
               <button type="button" onClick={() => setRegisterOpen(false)} className="w-1/3 rounded-xl border border-white/10 py-3 text-xs font-bold text-slate-300">{ar ? 'رجوع' : 'Back'}</button>
-              <button type="submit" disabled={loading} className="flex-1 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#9a7836] py-3 text-sm font-black text-[#071120] disabled:opacity-50">{loading ? (ar ? 'جاري الإرسال...' : 'Submitting...') : (ar ? 'إرسال طلب الحساب' : 'Submit account request')}</button>
+              <button type="submit" disabled={loading} className="flex-1 rounded-xl bg-gradient-to-r from-[#c5a059] to-[#9a7836] py-3 text-sm font-black text-[#071120] disabled:opacity-50">{loading ? (ar ? 'جاري الإرسال...' : 'Submitting...') : selectedRole === 'super_admin' ? (ar ? 'إنشاء الحساب والدخول' : 'Create account and sign in') : (ar ? 'إرسال طلب الحساب' : 'Submit account request')}</button>
             </div>
           </form> : <form onSubmit={submit} className="space-y-4">
             <div>
