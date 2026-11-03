@@ -3,6 +3,7 @@ import { createAuthUser, getAuthByEmail, getDb, readWorkspace, saveWorkspace } f
 import { addAudit, isValidEmail, newId, nowIso } from '@/lib/server/domain'
 import { fail, ok, readJson } from '@/lib/server/http'
 import type { Parent, Role, Teacher, User } from '@/lib/school/types'
+import { COMMON_SCHOOL_SUBJECTS } from '@/lib/school/subjects'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,7 @@ interface RegisterBody {
   studentNumber?: string
   stage?: 'primary' | 'preparatory' | 'secondary'
   subjectIds?: string[]
+  subjectCodes?: string[]
   classIds?: string[]
 }
 
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
     let teachers = stored.data.teachers
     let parents = stored.data.parents
     let students = stored.data.students
+    let subjects = stored.data.subjects
 
     if (role === 'student') {
       const studentNumber = body.studentNumber?.trim()
@@ -90,12 +93,27 @@ export async function POST(request: Request) {
     if (role === 'teacher') {
       const stage = body.stage
       const gradeLevels: number[] = stage && stage in STAGE_GRADES ? [...STAGE_GRADES[stage as keyof typeof STAGE_GRADES]] : []
-      const subjectIds = Array.isArray(body.subjectIds) ? [...new Set(body.subjectIds)] : []
+      const requestedSubjectIds = Array.isArray(body.subjectIds) ? [...new Set(body.subjectIds)] : []
+      const requestedSubjectCodes = Array.isArray(body.subjectCodes)
+        ? [...new Set(body.subjectCodes.map(code => String(code).trim().toUpperCase()))]
+        : []
+      const validSubjectCodes = new Set(COMMON_SCHOOL_SUBJECTS.map(subject => subject.code))
+      const existingSubjects = stored.data.subjects.filter(subject => requestedSubjectCodes.includes(subject.code.toUpperCase()))
+      const newSubjects = COMMON_SCHOOL_SUBJECTS
+        .filter(subject => requestedSubjectCodes.includes(subject.code) && !stored.data.subjects.some(existing => existing.code.toUpperCase() === subject.code))
+        .map(subject => ({ ...subject, id: newId('sbj') }))
+      const resolvedSubjectIds = [...new Set([
+        ...requestedSubjectIds,
+        ...existingSubjects.map(subject => subject.id),
+        ...newSubjects.map(subject => subject.id),
+      ])]
       const classIds = Array.isArray(body.classIds) && body.classIds.length
         ? [...new Set(body.classIds)]
         : stored.data.classes.filter(cls => gradeLevels.includes(cls.gradeLevel)).map(cls => cls.id)
       const availableClasses = stored.data.classes.filter(cls => gradeLevels.includes(cls.gradeLevel))
-      if (!gradeLevels.length || !subjectIds.length || subjectIds.some(subjectId => !stored.data.subjects.some(subject => subject.id === subjectId))) {
+      if (!gradeLevels.length || !resolvedSubjectIds.length ||
+        requestedSubjectIds.some(subjectId => !stored.data.subjects.some(subject => subject.id === subjectId)) ||
+        requestedSubjectCodes.some(code => !validSubjectCodes.has(code))) {
         db.exec('ROLLBACK')
         return fail(400, 'invalid_teacher_selection')
       }
@@ -104,30 +122,33 @@ export async function POST(request: Request) {
         return fail(400, 'invalid_teacher_classes')
       }
       const teacherId = newId('tch')
+      subjects = [...stored.data.subjects, ...newSubjects]
       const teacher: Teacher = {
         id: teacherId, userId: id, nameAr, nameEn, email, phone: user.phone,
         employeeNo: `TCH-${new Date().getFullYear()}-${String(stored.data.teachers.length + 1).padStart(3, '0')}`,
-        subjectIds, classIds, gradeLevels, status: 'inactive', joinedAt: now,
+        subjectIds: resolvedSubjectIds, classIds, gradeLevels, status: 'inactive', joinedAt: now,
         specialization: stage,
       }
       user.teacherId = teacherId
       teachers = [...teachers, teacher]
     }
 
+    const teacherStageAr = body.stage === 'primary' ? 'المرحلة الابتدائية' : body.stage === 'preparatory' ? 'المرحلة الإعدادية' : body.stage === 'secondary' ? 'المرحلة الثانوية' : '—'
+    const teacherStageEn = body.stage === 'primary' ? 'Primary' : body.stage === 'preparatory' ? 'Preparatory' : body.stage === 'secondary' ? 'Secondary' : '—'
     const manager = stored.data.users.find(entry => entry.role === 'super_admin' && entry.status === 'active')
     const notification = manager ? {
       id: newId('ntf'), recipientId: manager.id, category: 'system' as const,
       titleAr: 'طلب حساب جديد بانتظار المراجعة',
       titleEn: 'New account request pending review',
-      bodyAr: `طلب ${role === 'teacher' ? 'معلم' : role === 'parent' ? 'ولي أمر' : 'طالب'} ${nameAr} إنشاء حساب.${role === 'student' && body.studentNumber?.trim() ? ` رقم الطالب: ${body.studentNumber.trim()}.` : ''}`,
-      bodyEn: `${nameEn} submitted a ${role} account request.${role === 'student' && body.studentNumber?.trim() ? ` Student ID: ${body.studentNumber.trim()}.` : ''}`,
+      bodyAr: `طلب ${role === 'teacher' ? 'معلم' : role === 'parent' ? 'ولي أمر' : 'طالب'} ${nameAr} إنشاء حساب.${role === 'teacher' ? ` المرحلة: ${teacherStageAr}، المواد: ${(teachers.find(entry => entry.userId === id)?.subjectIds || []).map(subjectId => subjects.find(subject => subject.id === subjectId)?.nameAr).filter(Boolean).join('، ')}.` : ''}${role === 'student' && body.studentNumber?.trim() ? ` رقم الطالب: ${body.studentNumber.trim()}.` : ''}`,
+      bodyEn: `${nameEn} submitted a ${role} account request.${role === 'teacher' ? ` Stage: ${teacherStageEn}, subjects: ${(teachers.find(entry => entry.userId === id)?.subjectIds || []).map(subjectId => subjects.find(subject => subject.id === subjectId)?.nameEn).filter(Boolean).join(', ')}.` : ''}${role === 'student' && body.studentNumber?.trim() ? ` Student ID: ${body.studentNumber.trim()}.` : ''}`,
       createdAt: now, read: false, delivery: 'in_app' as const,
       deliveryStatus: 'delivered' as const, link: 'users',
     } : null
 
     let data = {
       ...stored.data,
-      users: [...stored.data.users, user], teachers, parents, students,
+      users: [...stored.data.users, user], teachers, parents, students, subjects,
       notifications: notification ? [notification, ...stored.data.notifications] : stored.data.notifications,
     }
     data = addAudit(data, { userId: id, nameAr, nameEn }, 'account_registration_request', 'user', id, `Pending ${role} registration`)

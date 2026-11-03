@@ -19,6 +19,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { useSchool } from '@/lib/school/store'
+import { COMMON_SCHOOL_SUBJECTS } from '@/lib/school/subjects'
 
 interface LoginScreenProps {
   onBackToPublic?: () => void
@@ -49,8 +50,17 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
   const [resetLoading, setResetLoading] = useState(false)
   const [resetSuccess, setResetSuccess] = useState('')
   const [resetError, setResetError] = useState('')
+  const [resetToken, setResetToken] = useState('')
+  const [newResetPassword, setNewResetPassword] = useState('')
+  const [confirmResetPassword, setConfirmResetPassword] = useState('')
 
   const settings = data?.settings
+  const teacherSubjectOptions = [
+    ...data.subjects.map(subject => ({ value: subject.id, nameAr: subject.nameAr, nameEn: subject.nameEn })),
+    ...COMMON_SCHOOL_SUBJECTS
+      .filter(subject => !data.subjects.some(existing => existing.code.toLowerCase() === subject.code.toLowerCase()))
+      .map(subject => ({ value: `catalog:${subject.code}`, nameAr: subject.nameAr, nameEn: subject.nameEn })),
+  ]
 
   useEffect(() => {
     let active = true
@@ -111,7 +121,8 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
           password,
           studentNumber: selectedRole === 'student' ? registerStudentNumber.trim() : undefined,
           stage: selectedRole === 'teacher' ? registerStage : undefined,
-          subjectIds: selectedRole === 'teacher' ? [registerSubject] : undefined,
+          subjectIds: selectedRole === 'teacher' && !registerSubject.startsWith('catalog:') ? [registerSubject] : undefined,
+          subjectCodes: selectedRole === 'teacher' && registerSubject.startsWith('catalog:') ? [registerSubject.slice('catalog:'.length)] : undefined,
         }),
       })
       const result = await response.json()
@@ -168,16 +179,56 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
       })
       const json = await res.json()
       if (res.ok && json.ok) {
-        setResetSuccess(
-          ar
-            ? 'تم إرسال تعليمات إعادة تعيين كلمة المرور إلى بريدك المسجل إذا كان موجوداً بالنظام.'
-            : 'Password reset instructions have been dispatched to your registered email if on file.'
-        )
+        if (json.resetToken) {
+          setResetToken(json.resetToken)
+          setResetSuccess(ar ? 'تم التحقق من الحساب. اختر كلمة مرور جديدة لإكمال الاستعادة.' : 'Account verified. Choose a new password to finish recovery.')
+        } else {
+          setResetSuccess(
+            ar
+              ? 'إذا كان البريد مسجلاً، فستصلك تعليمات الاستعادة عند إعداد خدمة البريد الإلكتروني.'
+              : 'If the address is registered, reset instructions will arrive when email delivery is configured.'
+          )
+        }
       } else {
         setResetError(json.error || (ar ? 'تعذر إرسال طلب إعادة التعيين.' : 'Failed to dispatch reset request.'))
       }
     } catch {
       setResetError(ar ? 'خطأ في الاتصال بالخادم.' : 'Server connection error.')
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
+  const completePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setResetError('')
+    if (newResetPassword !== confirmResetPassword) {
+      setResetError(ar ? 'كلمتا المرور غير متطابقتين.' : 'Passwords do not match.')
+      return
+    }
+    setResetLoading(true)
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, newPassword: newResetPassword }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.ok) {
+        setResetError(result.error === 'weak_password'
+          ? (ar ? 'كلمة المرور يجب أن تكون ٨ أحرف على الأقل وتحتوي على حرف ورقم.' : 'Password must be at least 8 characters and include a letter and a number.')
+          : (ar ? 'انتهت صلاحية رابط الاستعادة أو تعذر استخدامه. ابدأ طلبًا جديدًا.' : 'The reset link expired or could not be used. Start a new request.'))
+        return
+      }
+      setEmail(resetEmail.trim())
+      setPassword(newResetPassword)
+      setRegisterSuccess(ar ? 'تم تغيير كلمة المرور. استخدمها الآن لتسجيل الدخول.' : 'Password updated. Use it to sign in now.')
+      setResetToken('')
+      setNewResetPassword('')
+      setConfirmResetPassword('')
+      setForgotOpen(false)
+    } catch {
+      setResetError(ar ? 'تعذر الاتصال بالخادم.' : 'Could not connect to the server.')
     } finally {
       setResetLoading(false)
     }
@@ -319,7 +370,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
 
           {selectedRole === 'super_admin' && !registerOpen && !managerSetupAllowed && (
             <div className="mb-5 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3.5 py-3 text-[11px] leading-relaxed text-slate-400">
-              {ar ? 'حساب المدير لا يُنشأ من طلب التسجيل العادي. استخدم البريد الذي تم تسجيله عند إعداد المدرسة.' : 'Manager accounts are not created through public registration. Sign in with the email used during school setup.'}
+              {ar ? 'يوجد حساب مدير مسجل بالفعل. لو نسيت كلمة المرور اضغط «نسيت كلمة المرور؟» لاستعادتها، ولا تحتاج إلى إنشاء حساب مدير جديد.' : 'A manager account already exists. Use “Forgot password?” to recover access; you do not need to create another manager account.'}
             </div>
           )}
 
@@ -348,7 +399,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
               </select>
               <select required value={registerSubject} onChange={e => setRegisterSubject(e.target.value)} className="w-full bg-[#0d1d38] border border-white/10 rounded-xl px-3.5 py-3 text-sm text-white focus:outline-none focus:border-[#c5a059]">
                 <option value="">{ar ? 'اختر المادة' : 'Choose subject'}</option>
-                {data.subjects.map(subject => <option key={subject.id} value={subject.id}>{ar ? subject.nameAr : subject.nameEn}</option>)}
+                {teacherSubjectOptions.map(subject => <option key={subject.value} value={subject.value}>{ar ? subject.nameAr : subject.nameEn}</option>)}
               </select>
             </div>}
             <input type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} placeholder={ar ? 'كلمة مرور (٨ أحرف على الأقل وحرف ورقم)' : 'Password (8+ characters, letter and number)'} className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#c5a059]" />
@@ -382,7 +433,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
                 </label>
                 <button
                   type="button"
-                  onClick={() => setForgotOpen(true)}
+                  onClick={() => { setResetEmail(email); setResetSuccess(''); setResetError(''); setResetToken(''); setForgotOpen(true) }}
                   className="text-xs font-semibold text-[#c5a059] hover:underline"
                 >
                   {ar ? 'نسيت كلمة المرور؟' : 'Forgot password?'}
@@ -444,7 +495,9 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
               {ar ? 'استعادة كلمة المرور' : 'Reset Your Password'}
             </h3>
             <p className="text-xs text-slate-300 mt-1 mb-6">
-              {ar ? 'أدخل البريد الإلكتروني المسجل بالمدرسة لاستلام رابط التعيين.' : 'Enter your registered school email to receive password reset instructions.'}
+              {resetToken
+                ? (ar ? 'اختر كلمة مرور جديدة. يجب أن تكون ٨ أحرف على الأقل وتحتوي على حرف ورقم.' : 'Choose a new password. Use at least 8 characters with a letter and a number.')
+                : (ar ? 'أدخل البريد الإلكتروني المسجل بالمدرسة لبدء استعادة كلمة المرور.' : 'Enter the registered school email to begin password recovery.')}
             </p>
 
             {resetSuccess && (
@@ -461,23 +514,19 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
               </div>
             )}
 
-            <form onSubmit={handlePasswordReset} className="space-y-4">
-              <div>
+            <form onSubmit={resetToken ? completePasswordReset : handlePasswordReset} className="space-y-4">
+              {!resetToken ? <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">{ar ? 'البريد الإلكتروني' : 'Email Address'}</label>
-                <input
-                  type="email"
-                  value={resetEmail}
-                  onChange={e => setResetEmail(e.target.value)}
-                  placeholder="name@stgeorgeschool.edu"
-                  className="w-full bg-white/5 border border-white/15 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#c5a059]"
-                  required
-                />
-              </div>
+                <input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="name@stgeorgeschool.edu" className="w-full bg-white/5 border border-white/15 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#c5a059]" required />
+              </div> : <>
+                <input type="password" minLength={8} value={newResetPassword} onChange={e => setNewResetPassword(e.target.value)} placeholder={ar ? 'كلمة المرور الجديدة' : 'New password'} className="w-full bg-white/5 border border-white/15 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#c5a059]" required />
+                <input type="password" minLength={8} value={confirmResetPassword} onChange={e => setConfirmResetPassword(e.target.value)} placeholder={ar ? 'تأكيد كلمة المرور الجديدة' : 'Confirm new password'} className="w-full bg-white/5 border border-white/15 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#c5a059]" required />
+              </>}
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setForgotOpen(false); setResetSuccess(''); setResetError('') }}
+                  onClick={() => { setForgotOpen(false); setResetSuccess(''); setResetError(''); setResetToken('') }}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
                 >
                   {ar ? 'إلغاء' : 'Cancel'}
@@ -487,7 +536,11 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
                   disabled={resetLoading}
                   className="px-5 py-2 rounded-xl bg-[#c5a059] text-[#071120] text-xs font-bold hover:brightness-110 disabled:opacity-50"
                 >
-                  {resetLoading ? (ar ? 'جاري الإرسال...' : 'Sending...') : (ar ? 'إرسال الرابط' : 'Send Reset Link')}
+                  {resetLoading
+                    ? (ar ? 'جاري المعالجة...' : 'Processing...')
+                    : resetToken
+                      ? (ar ? 'حفظ كلمة المرور' : 'Save password')
+                      : (ar ? 'متابعة' : 'Continue')}
                 </button>
               </div>
             </form>
