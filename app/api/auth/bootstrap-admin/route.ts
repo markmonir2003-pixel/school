@@ -21,11 +21,14 @@ function getAdminSetupMode() {
   const workspaceAdmins = stored.data.users.filter(user => user.role === 'super_admin')
   const authAdmins = getDb().prepare('SELECT id FROM auth_users WHERE role = ?').all('super_admin') as Array<{ id: string }>
   if (workspaceAdmins.length === 0 && authAdmins.length === 0) return 'create' as const
+  const managerHasSignedIn = workspaceAdmins.length === 1 && stored.data.auditLogs.some(
+    entry => entry.actorId === workspaceAdmins[0].id && entry.action === 'login',
+  )
   if (
     workspaceAdmins.length === 1 &&
     authAdmins.length === 1 &&
     workspaceAdmins[0].id === authAdmins[0].id &&
-    !workspaceAdmins[0].lastLogin
+    !managerHasSignedIn
   ) return 'recover' as const
   return null
 }
@@ -65,9 +68,12 @@ export async function POST(request: Request) {
     const workspaceAdmins = stored.data.users.filter(user => user.role === 'super_admin')
     const authAdmins = db.prepare('SELECT id FROM auth_users WHERE role = ?').all('super_admin') as Array<{ id: string }>
     const existingAdmin = workspaceAdmins.length === 1 ? workspaceAdmins[0] : undefined
+    const managerHasSignedIn = Boolean(existingAdmin && stored.data.auditLogs.some(
+      entry => entry.actorId === existingAdmin.id && entry.action === 'login',
+    ))
     const isCreate = workspaceAdmins.length === 0 && authAdmins.length === 0
     const isRecover = Boolean(
-      existingAdmin && authAdmins.length === 1 && authAdmins[0].id === existingAdmin.id && !existingAdmin.lastLogin,
+      existingAdmin && authAdmins.length === 1 && authAdmins[0].id === existingAdmin.id && !managerHasSignedIn,
     )
     if (!isCreate && !isRecover) {
       db.exec('ROLLBACK')
@@ -99,13 +105,21 @@ export async function POST(request: Request) {
     const updatedUsers = isRecover
       ? stored.data.users.map(entry => entry.id === id ? user : entry)
       : [...stored.data.users, user]
-    const data = addAudit(
+    const setupAudit = addAudit(
       { ...stored.data, users: updatedUsers },
       { userId: id, nameAr, nameEn },
       isRecover ? 'initial_admin_credentials_confirmed' : 'initial_admin_created',
       'user',
       id,
       `${isRecover ? 'Initial administrator credentials confirmed' : 'Initial administrator account created'} for ${email}`,
+    )
+    const data = addAudit(
+      setupAudit,
+      { userId: id, nameAr, nameEn },
+      'login',
+      'user',
+      id,
+      'Administrator signed in after initial credential setup',
     )
 
     if (isRecover) {
