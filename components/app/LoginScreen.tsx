@@ -35,7 +35,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
   const [loading, setLoading] = useState(false)
   const [selectedRole, setSelectedRole] = useState<'student' | 'parent' | 'teacher' | 'super_admin'>('student')
   const [registerOpen, setRegisterOpen] = useState(false)
-  const [managerSetupMode, setManagerSetupMode] = useState<'create' | 'recover' | null>(null)
+  const [managerSetupMode, setManagerSetupMode] = useState<'create' | 'recover' | 'none' | 'unavailable' | null>(null)
   const [registerNameAr, setRegisterNameAr] = useState('')
   const [registerNameEn, setRegisterNameEn] = useState('')
   const [registerPhone, setRegisterPhone] = useState('')
@@ -65,9 +65,12 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
   useEffect(() => {
     let active = true
     fetch('/api/auth/bootstrap-admin', { cache: 'no-store' })
-      .then(response => response.json())
-      .then(result => { if (active) setManagerSetupMode(result.allowed ? result.mode : null) })
-      .catch(() => { if (active) setManagerSetupMode(null) })
+      .then(async response => {
+        if (!response.ok) throw new Error('manager_status_unavailable')
+        return response.json()
+      })
+      .then(result => { if (active) setManagerSetupMode(result.allowed ? result.mode : 'none') })
+      .catch(() => { if (active) setManagerSetupMode('unavailable') })
     return () => { active = false }
   }, [])
 
@@ -128,7 +131,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
       const result = await response.json()
       if (!response.ok || !result.ok) {
         if (result.error === 'manager_account_exists') {
-          setManagerSetupMode(null)
+          setManagerSetupMode('none')
           setRegisterOpen(false)
           setError(ar ? 'تم إنشاء حساب المدير بالفعل. سجّل الدخول بالبريد الذي استُخدم عند الإعداد.' : 'A manager account already exists. Sign in with the email used during setup.')
           return
@@ -143,7 +146,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
         return
       }
       if (selectedRole === 'super_admin') {
-        setManagerSetupMode(null)
+        setManagerSetupMode('none')
         setRegisterOpen(false)
         const signedIn = await login(email.trim(), password, 'super_admin')
         if (!signedIn.ok) {
@@ -374,9 +377,21 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
             </div>
           )}
 
-          {selectedRole === 'super_admin' && !registerOpen && !managerSetupMode && (
+          {selectedRole === 'super_admin' && !registerOpen && managerSetupMode === 'none' && (
             <div className="mb-5 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3.5 py-3 text-[11px] leading-relaxed text-slate-400">
               {ar ? 'يوجد حساب مدير مسجل بالفعل. لو نسيت كلمة المرور اضغط «نسيت كلمة المرور؟» لاستعادتها، ولا تحتاج إلى إنشاء حساب مدير جديد.' : 'A manager account already exists. Use “Forgot password?” to recover access; you do not need to create another manager account.'}
+            </div>
+          )}
+
+          {selectedRole === 'super_admin' && !registerOpen && managerSetupMode === 'unavailable' && (
+            <div role="alert" className="mb-5 rounded-xl border border-rose-400/20 bg-rose-500/[0.08] px-3.5 py-3 text-[11px] leading-relaxed text-rose-200">
+              {ar ? 'تعذر الاتصال بقاعدة بيانات المدرسة للتحقق من حساب المدير. لا يمكن إنشاء الحساب حتى تعود خدمة البيانات للعمل.' : 'The school database could not be reached to check the manager account. Account setup is unavailable until the data service is working.'}
+            </div>
+          )}
+
+          {selectedRole === 'super_admin' && !registerOpen && managerSetupMode === null && (
+            <div role="status" className="mb-5 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3.5 py-3 text-[11px] text-slate-400">
+              {ar ? 'جاري التحقق من حالة حساب المدير…' : 'Checking manager account status…'}
             </div>
           )}
 
