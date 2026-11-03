@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="16" y1="9" x2="80" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2D99A"/><stop offset=".52" stop-color="#C5A059"/><stop offset="1" stop-color="#8E6C32"/>
+    </linearGradient>
+    <linearGradient id="navy" x1="18" y1="13" x2="78" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17345D"/><stop offset="1" stop-color="#071426"/>
+    </linearGradient>
+  </defs>
+  <path d="M48 4 87 18v29c0 22-15.7 36.6-39 45C24.7 83.6 9 69 9 47V18L48 4Z" fill="url(#gold)"/>
+  <path d="M48 11 80 22v25c0 17.9-12.1 30.8-32 38.5C28.1 77.8 16 64.9 16 47V22l32-11Z" fill="url(#navy)" stroke="#F2D99A" stroke-opacity=".55"/>
+  <path d="M48 20 50.8 28.7 60 28.8 52.6 34.1 55.4 42.8 48 37.4 40.6 42.8 43.4 34.1 36 28.8 45.2 28.7 48 20Z" fill="url(#gold)"/>
+  <path d="M29 48.5c6.7-2.8 13.1-2.8 19 0v19c-5.9-2.8-12.3-2.8-19 0v-19Z" fill="#F7F1E4"/>
+  <path d="M67 48.5c-6.7-2.8-13.1-2.8-19 0v19c5.9-2.8 12.3-2.8 19 0v-19Z" fill="#E7D4AA"/>
+  <path d="M48 48.5v19" stroke="#C5A059" stroke-width="1.6"/>
+  <path d="M34 54c4-1.1 7.2-.8 10.2.3M34 59c4-1.1 7.2-.8 10.2.3M62 54c-4-1.1-7.2-.8-10.2.3M62 59c-4-1.1-7.2-.8-10.2.3" stroke="#9A7836" stroke-linecap="round" stroke-width="1.2"/>
+</svg>
