@@ -35,7 +35,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
   const [loading, setLoading] = useState(false)
   const [selectedRole, setSelectedRole] = useState<'student' | 'parent' | 'teacher' | 'super_admin'>('student')
   const [registerOpen, setRegisterOpen] = useState(false)
-  const [managerSetupAllowed, setManagerSetupAllowed] = useState(false)
+  const [managerSetupMode, setManagerSetupMode] = useState<'create' | 'recover' | null>(null)
   const [registerNameAr, setRegisterNameAr] = useState('')
   const [registerNameEn, setRegisterNameEn] = useState('')
   const [registerPhone, setRegisterPhone] = useState('')
@@ -66,8 +66,8 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
     let active = true
     fetch('/api/auth/bootstrap-admin', { cache: 'no-store' })
       .then(response => response.json())
-      .then(result => { if (active) setManagerSetupAllowed(result.allowed === true) })
-      .catch(() => { if (active) setManagerSetupAllowed(false) })
+      .then(result => { if (active) setManagerSetupMode(result.allowed ? result.mode : null) })
+      .catch(() => { if (active) setManagerSetupMode(null) })
     return () => { active = false }
   }, [])
 
@@ -128,7 +128,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
       const result = await response.json()
       if (!response.ok || !result.ok) {
         if (result.error === 'manager_account_exists') {
-          setManagerSetupAllowed(false)
+          setManagerSetupMode(null)
           setRegisterOpen(false)
           setError(ar ? 'تم إنشاء حساب المدير بالفعل. سجّل الدخول بالبريد الذي استُخدم عند الإعداد.' : 'A manager account already exists. Sign in with the email used during setup.')
           return
@@ -143,7 +143,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
         return
       }
       if (selectedRole === 'super_admin') {
-        setManagerSetupAllowed(false)
+        setManagerSetupMode(null)
         setRegisterOpen(false)
         const signedIn = await login(email.trim(), password, 'super_admin')
         if (!signedIn.ok) {
@@ -322,14 +322,18 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               {registerOpen
                 ? selectedRole === 'super_admin'
-                  ? (ar ? 'إنشاء حساب المدير الأول' : 'Create the first manager account')
+                  ? selectedRole === 'super_admin' && managerSetupMode === 'recover'
+                    ? (ar ? 'تأكيد بيانات حساب المدير' : 'Set up the manager sign-in')
+                    : (ar ? 'إنشاء حساب المدير الأول' : 'Create the first manager account')
                   : (ar ? 'طلب إنشاء حساب' : 'Request an account')
                 : (ar ? 'تسجيل الدخول إلى البوابة' : 'Sign in to Digital Campus')}
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-2">
               {registerOpen
                 ? selectedRole === 'super_admin'
-                  ? (ar ? 'أنشئ البريد وكلمة المرور الخاصة بك. الخيار متاح مرة واحدة فقط إذا لم يوجد حساب مدير.' : 'Choose your email and password. This one-time option appears only when no manager account exists.')
+                  ? selectedRole === 'super_admin' && managerSetupMode === 'recover'
+                    ? (ar ? 'تم إعداد المدرسة لكن المدير لم يسجل دخوله بعد. اختر البريد وكلمة المرور اللذين سيستخدمهما المدير. بعد الدخول الأول يُغلق هذا الخيار.' : 'The school is set up, but the manager has not signed in yet. Set the manager email and password. This option closes after the first sign-in.')
+                    : (ar ? 'أنشئ البريد وكلمة المرور الخاصة بك. الخيار متاح مرة واحدة فقط إذا لم يوجد حساب مدير.' : 'Choose your email and password. This one-time option appears only when no manager account exists.')
                   : (ar ? 'تُراجع الإدارة الطلبات قبل تفعيل الحساب.' : 'The administrator reviews requests before activating accounts.')
                 : (ar ? 'اختر نوع الحساب ثم أدخل بيانات الدخول الخاصة به.' : 'Choose your account type, then enter its credentials.')}
             </p>
@@ -356,19 +360,21 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
             })}
           </div>
 
-          {selectedRole === 'super_admin' && !registerOpen && managerSetupAllowed && (
+          {selectedRole === 'super_admin' && !registerOpen && managerSetupMode && (
             <div className="mb-5 rounded-2xl border border-[#c5a059]/25 bg-[#c5a059]/[0.07] p-4">
-              <p className="text-xs font-bold text-white">{ar ? 'أول مرة تستخدم النظام؟' : 'First time setting up the school?'}</p>
+              <p className="text-xs font-bold text-white">{managerSetupMode === 'recover' ? (ar ? 'تجهيز دخول المدير لأول مرة' : 'Finish first manager sign-in') : (ar ? 'أول مرة تستخدم النظام؟' : 'First time setting up the school?')}</p>
               <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-                {ar ? 'لا يوجد حساب مدير بعد. أنشئ الحساب الأول بالبريد وكلمة المرور الخاصين بك.' : 'No manager account exists yet. Create the first one with your own email and password.'}
+                {managerSetupMode === 'recover'
+                  ? (ar ? 'حساب المدير أُنشئ في الإعداد، لكن لم يحدث له دخول ناجح بعد. أكمل بيانات الدخول الآن.' : 'The manager record was created during setup, but has no successful sign-in yet. Finish its login details now.')
+                  : (ar ? 'لا يوجد حساب مدير بعد. أنشئ الحساب الأول بالبريد وكلمة المرور الخاصين بك.' : 'No manager account exists yet. Create the first one with your own email and password.')}
               </p>
               <button type="button" onClick={() => { setRegisterOpen(true); setError('') }} className="mt-3 w-full rounded-xl bg-gradient-to-r from-[#c5a059] to-[#9a7836] px-4 py-2.5 text-xs font-black text-[#071120] transition hover:brightness-110">
-                {ar ? 'إنشاء حساب المدير الأول' : 'Create first manager account'}
+                {managerSetupMode === 'recover' ? (ar ? 'تجهيز حساب المدير' : 'Set up manager account') : (ar ? 'إنشاء حساب المدير الأول' : 'Create first manager account')}
               </button>
             </div>
           )}
 
-          {selectedRole === 'super_admin' && !registerOpen && !managerSetupAllowed && (
+          {selectedRole === 'super_admin' && !registerOpen && !managerSetupMode && (
             <div className="mb-5 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3.5 py-3 text-[11px] leading-relaxed text-slate-400">
               {ar ? 'يوجد حساب مدير مسجل بالفعل. لو نسيت كلمة المرور اضغط «نسيت كلمة المرور؟» لاستعادتها، ولا تحتاج إلى إنشاء حساب مدير جديد.' : 'A manager account already exists. Use “Forgot password?” to recover access; you do not need to create another manager account.'}
             </div>

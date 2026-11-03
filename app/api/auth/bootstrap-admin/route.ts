@@ -1,5 +1,5 @@
-import { createAuthUser, createSession, getDb, readWorkspace, saveWorkspace } from '@/lib/server/db'
-import { hashPassword, loginThrottled, passwordProblem, recordLoginFailure, setSessionCookie } from '@/lib/server/auth'
+import { createAuthUser, createSession, getDb, readWorkspace, saveWorkspace, updateAuthEmail, updateAuthPassword } from '@/lib/server/db'
+import { clearLoginFailures, hashPassword, loginThrottled, passwordProblem, recordLoginFailure, setSessionCookie } from '@/lib/server/auth'
 import { addAudit, isValidEmail, newId, nowIso } from '@/lib/server/domain'
 import { fail, ok, readJson, NO_STORE } from '@/lib/server/http'
 import { scopeWorkspace } from '@/lib/server/scope'
@@ -15,18 +15,26 @@ interface BootstrapAdminBody {
   password?: string
 }
 
-function canCreateFirstAdmin() {
+function getAdminSetupMode() {
   const stored = readWorkspace()
-  if (!stored) return false
-  const workspaceHasAdmin = stored.data.users.some(user => user.role === 'super_admin')
-  const authHasAdmin = Boolean(getDb().prepare('SELECT id FROM auth_users WHERE role = ? LIMIT 1').get('super_admin'))
-  return !workspaceHasAdmin && !authHasAdmin
+  if (!stored) return null
+  const workspaceAdmins = stored.data.users.filter(user => user.role === 'super_admin')
+  const authAdmins = getDb().prepare('SELECT id FROM auth_users WHERE role = ?').all('super_admin') as Array<{ id: string }>
+  if (workspaceAdmins.length === 0 && authAdmins.length === 0) return 'create' as const
+  if (
+    workspaceAdmins.length === 1 &&
+    authAdmins.length === 1 &&
+    workspaceAdmins[0].id === authAdmins[0].id &&
+    !workspaceAdmins[0].lastLogin
+  ) return 'recover' as const
+  return null
 }
 
 export async function GET() {
   const stored = readWorkspace()
+  const mode = getAdminSetupMode()
   return Response.json(
-    { ok: true, allowed: Boolean(stored) && canCreateFirstAdmin() },
+    { ok: true, allowed: Boolean(stored) && mode !== null, mode },
     { headers: NO_STORE },
   )
 }
@@ -54,46 +62,64 @@ export async function POST(request: Request) {
       db.exec('ROLLBACK')
       return fail(409, 'setup_required')
     }
-    const workspaceHasAdmin = stored.data.users.some(user => user.role === 'super_admin')
-    const authHasAdmin = Boolean(db.prepare('SELECT id FROM auth_users WHERE role = ? LIMIT 1').get('super_admin'))
-    if (workspaceHasAdmin || authHasAdmin) {
+    const workspaceAdmins = stored.data.users.filter(user => user.role === 'super_admin')
+    const authAdmins = db.prepare('SELECT id FROM auth_users WHERE role = ?').all('super_admin') as Array<{ id: string }>
+    const existingAdmin = workspaceAdmins.length === 1 ? workspaceAdmins[0] : undefined
+    const isCreate = workspaceAdmins.length === 0 && authAdmins.length === 0
+    const isRecover = Boolean(
+      existingAdmin && authAdmins.length === 1 && authAdmins[0].id === existingAdmin.id && !existingAdmin.lastLogin,
+    )
+    if (!isCreate && !isRecover) {
       db.exec('ROLLBACK')
       return fail(409, 'manager_account_exists')
     }
-    if (db.prepare('SELECT id FROM auth_users WHERE email = ? COLLATE NOCASE').get(email)) {
+    const emailOwner = db.prepare('SELECT id FROM auth_users WHERE email = ? COLLATE NOCASE').get(email) as { id: string } | undefined
+    if (emailOwner && emailOwner.id !== existingAdmin?.id) {
       db.exec('ROLLBACK')
       return fail(409, 'email_taken')
     }
 
-    const id = newId('usr')
     const now = nowIso()
-    const user: User = {
-      id,
-      nameAr,
-      nameEn,
-      email,
-      phone: body?.phone?.trim() || '',
-      role: 'super_admin',
-      status: 'active',
-      avatarColor: 'from-[#0f1f3d] to-[#c5a059]',
-      title: 'Super Administrator',
-      createdAt: now,
-    }
+    const id = existingAdmin?.id || newId('usr')
+    const user: User = existingAdmin
+      ? { ...existingAdmin, nameAr, nameEn, email, phone: body?.phone?.trim() || '', status: 'active', lastLogin: now }
+      : {
+          id,
+          nameAr,
+          nameEn,
+          email,
+          phone: body?.phone?.trim() || '',
+          role: 'super_admin',
+          status: 'active',
+          avatarColor: 'from-[#0f1f3d] to-[#c5a059]',
+          title: 'Super Administrator',
+          createdAt: now,
+          lastLogin: now,
+        }
+    const updatedUsers = isRecover
+      ? stored.data.users.map(entry => entry.id === id ? user : entry)
+      : [...stored.data.users, user]
     const data = addAudit(
-      { ...stored.data, users: [...stored.data.users, user] },
+      { ...stored.data, users: updatedUsers },
       { userId: id, nameAr, nameEn },
-      'initial_admin_created',
+      isRecover ? 'initial_admin_credentials_confirmed' : 'initial_admin_created',
       'user',
       id,
-      `Initial school administrator account created for ${email}`,
+      `${isRecover ? 'Initial administrator credentials confirmed' : 'Initial administrator account created'} for ${email}`,
     )
 
-    createAuthUser({ id, email, passwordHash: hashPassword(password), role: 'super_admin' })
+    if (isRecover) {
+      updateAuthEmail(id, email)
+      updateAuthPassword(id, hashPassword(password))
+    } else {
+      createAuthUser({ id, email, passwordHash: hashPassword(password), role: 'super_admin' })
+    }
     const saved = saveWorkspace(data)
     db.exec('COMMIT')
 
     const session = createSession(id)
     await setSessionCookie(session.token)
+    clearLoginFailures(throttleKey)
     return ok({
       ok: true,
       user,
