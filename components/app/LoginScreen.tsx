@@ -359,7 +359,7 @@ export function LoginScreen({ onBackToPublic }: LoginScreenProps) {
               { id: 'student', ar: 'طالب', en: 'Student', icon: GraduationCap },
               { id: 'parent', ar: 'ولي أمر', en: 'Parent', icon: UsersRound },
               { id: 'teacher', ar: 'معلم', en: 'Teacher', icon: KeyRound },
-              { id: 'super_admin', ar: 'مدير المدرسة', en: 'School Manager', icon: ShieldCheck },
+              { id: 'super_admin', ar: 'الإدارة', en: 'Administration', icon: ShieldCheck },
             ] as const).map(option => {
               const Icon = option.icon
               const selected = selectedRole === option.id

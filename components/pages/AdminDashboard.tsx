@@ -328,12 +328,12 @@ export function AdminDashboard({ arabic = true }: AdminDashboardProps) {
               <span>{arabic ? 'مدرسة سان جورج — الحرم الرقمي المعتمد' : 'St. George School — Official Digital Campus'}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {arabic ? `مرحباً بك، ${user?.nameAr || 'المدير العام'}` : `Welcome, ${user?.nameEn || 'Administrator'}`}
+              {arabic ? `مرحباً بك في صفحة الإدارة، ${user?.nameAr || 'الإدارة'}` : `Welcome to Administration, ${user?.nameEn || 'Administrator'}`}
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
               {arabic
-                ? 'لوحة الإشراف والمتابعة الشاملة لمدرسة سان جورج. جميع الإحصائيات مستخرجة لحظياً من قاعدة البيانات الحقيقية.'
-                : 'Central operations dashboard for St. George School. All data and metrics are live from persistent database storage.'}
+                ? 'صفحة الإدارة لمتابعة المدرسة وقراءة مؤشرات الطلاب والمعلمين والفصول من سجلات المدرسة.'
+                : 'Administration workspace for reviewing school operations and student, teacher, and class records.'}
             </p>
           </div>
 

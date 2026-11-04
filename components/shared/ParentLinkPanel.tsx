@@ -30,15 +30,15 @@ export function ParentLinkPanel({ role, arabic }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, ...extra }),
     })
-    const body = await response.json()
-    if (!response.ok || !body.ok) throw new Error(body.error || 'request_failed')
+    const body = await response.json().catch(() => null)
+    if (!response.ok || !body?.ok) throw new Error(response.status >= 500 ? 'database_unavailable' : body?.error || 'request_failed')
     return body
   }
 
   const refreshLinks = async () => {
     const response = await fetch('/api/parent-links', { cache: 'no-store' })
-    const body = await response.json()
-    if (response.ok && body.ok) setLinks(body.links || [])
+    const body = await response.json().catch(() => null)
+    if (response.ok && body?.ok) setLinks(body.links || [])
   }
 
   const run = async (fn: () => Promise<void>) => {
@@ -47,11 +47,13 @@ export function ParentLinkPanel({ role, arabic }: Props) {
     setNotice('')
     try { await fn() } catch (cause) {
       const code = cause instanceof Error ? cause.message : 'request_failed'
-      setError(code === 'invalid_expired_or_used_token'
-        ? t('الرمز غير صالح أو انتهت صلاحيته أو سبق استخدامه.', 'This code is invalid, expired, or already used.')
-        : code === 'link_already_exists'
-          ? t('يوجد طلب ربط سابق لهذا الطالب.', 'A link already exists for this student.')
-          : t('تعذر إكمال الطلب. حاول مرة أخرى.', 'The request could not be completed. Please try again.'))
+      setError(code === 'database_unavailable'
+        ? t('قاعدة بيانات المدرسة غير متاحة الآن. لم يتم حفظ التغيير.', 'The school database is unavailable. Your change was not saved.')
+        : code === 'invalid_expired_or_used_token'
+          ? t('الرمز غير صالح أو انتهت صلاحيته أو سبق استخدامه.', 'This code is invalid, expired, or already used.')
+          : code === 'link_already_exists'
+            ? t('يوجد ربط سابق لهذا الطالب.', 'This student is already linked.')
+            : t('تعذر إكمال الطلب. حاول مرة أخرى.', 'The request could not be completed. Please try again.'))
     } finally { setBusy(false) }
   }
 
@@ -61,8 +63,8 @@ export function ParentLinkPanel({ role, arabic }: Props) {
     let stopped = false
     const refresh = async () => {
       const response = await fetch('/api/parent-links', { cache: 'no-store' })
-      const body = await response.json()
-      if (!stopped && response.ok && body.ok) {
+      const body = await response.json().catch(() => null)
+      if (!stopped && response.ok && body?.ok) {
         const nextLinks = body.links || []
         setLinks(nextLinks)
         if (role === 'parent' && nextLinks.some((link: LinkRow) => link.status === 'approved')) await refreshWorkspace()
@@ -118,13 +120,14 @@ export function ParentLinkPanel({ role, arabic }: Props) {
     setStudent(null)
     setCode('')
     await refreshLinks()
-    setNotice(t('تم إرسال طلب الربط إلى إدارة المدرسة للموافقة.', 'Your link request was sent to school administration for approval.'))
+      await refreshWorkspace()
+      setNotice(t('تم ربط الحسابين بنجاح. ستظهر بيانات الطالب الآن.', 'Accounts linked successfully. The student’s information is now available.'))
   })
 
   const unlink = (linkId: string) => run(async () => {
     await send('unlink', { linkId })
     await refreshLinks()
-    setNotice(t('تم إرسال طلب فك الارتباط.', 'Unlink request submitted.'))
+    setNotice(t('تم فك الارتباط بين الحسابين.', 'The accounts have been unlinked.'))
   })
 
   return (

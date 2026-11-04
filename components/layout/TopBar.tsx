@@ -31,7 +31,7 @@ interface TopBarProps {
 }
 
 const pageTitles: Record<PageId, { ar: string; en: string }> = {
-  'admin-dashboard': { ar: 'نظرة عامة على المدرسة', en: 'School Overview' },
+  'admin-dashboard': { ar: 'صفحة الإدارة', en: 'Administration' },
   'teacher-dashboard': { ar: 'لوحة تحكم المعلمين', en: 'Teacher Workspace' },
   'parent-portal': { ar: 'بوابة أولياء الأمور', en: 'Parent Portal' },
   'student-portal': { ar: 'بوابة الطلاب', en: 'Student Portal' },

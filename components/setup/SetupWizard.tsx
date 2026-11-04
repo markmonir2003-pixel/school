@@ -359,10 +359,10 @@ export function SetupWizard() {
             <div className="space-y-4 animate-fade-in">
               <h2 className="text-lg font-bold text-[#c5a059] flex items-center gap-2">
                 <ShieldCheck className="size-5" />
-                {ar ? 'الخطوة ٣: حساب المدير العام (Super Admin)' : 'Step 3: Super Administrator Account'}
+                {ar ? 'الخطوة ٣: حساب الإدارة' : 'Step 3: Administration Account'}
               </h2>
               <p className="text-xs text-slate-400">
-                {ar ? 'هذا الحساب سيمتلك الصلاحيات الكاملة لإدارة المدرسة. يرجى حفظ بيانات الدخول بعناية.' : 'This account holds top-level permissions. Credentials will be securely hashed with scrypt.'}
+                {ar ? 'هذا الحساب مخصص لإدارة المدرسة ويملك صلاحياتها الكاملة. احفظ بيانات الدخول بأمان.' : 'This account is reserved for school administration and holds its full permissions. Store the credentials securely.'}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>

@@ -46,7 +46,7 @@ export const PAGE_ACCESS: Record<PageId, Role[]> = {
 }
 
 export const ROLE_LABELS: Record<Role, { ar: string; en: string }> = {
-  super_admin: { ar: 'المدير العام', en: 'Super Administrator' },
+  super_admin: { ar: 'الإدارة', en: 'Administration' },
   school_admin: { ar: 'مدير المدرسة', en: 'School Administrator' },
   principal: { ar: 'الناظر / المدير الأكاديمي', en: 'Principal / Academic Director' },
   teacher: { ar: 'معلم', en: 'Teacher' },

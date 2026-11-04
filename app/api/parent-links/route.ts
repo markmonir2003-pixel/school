@@ -108,10 +108,13 @@ export async function POST(request: Request) {
       try {
         const currentToken = getQrTokenByHash(body.token)
         if (!currentToken || currentToken.id !== token.id || existingLink(user.id, token.student_user_id)) throw new Error('invalid_expired_or_used_token')
-        const link = createParentChildLink({ parentUserId: user.id, studentUserId: token.student_user_id, relationshipType: 'guardian', createdBy: user.id, status: 'pending' })
+        // A valid one-time code is the student's consent, so activate the guardian link directly.
+        const link = createParentChildLink({ parentUserId: user.id, studentUserId: token.student_user_id, relationshipType: 'guardian', createdBy: user.id })
+        approveParentChildLink(link.id, user.id)
         markQrTokenUsed(token.id)
         db.exec('COMMIT')
-        logLoginAudit({ userId: user.id, role: auth.role, action: 'parent_link_requested', success: true, details: `link:${link.id}` })
+        syncWorkspaceLink(user.id, token.student_user_id, true)
+        logLoginAudit({ userId: user.id, role: auth.role, action: 'parent_link_confirmed', success: true, details: `link:${link.id}` })
         return ok({ ok: true, link })
       } catch (error) {
         db.exec('ROLLBACK')

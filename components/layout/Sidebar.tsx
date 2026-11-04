@@ -42,7 +42,7 @@ const navSections: NavSection[] = [
     titleAr: 'لوحات التحكم',
     titleEn: 'Dashboards',
     items: [
-      { id: 'admin-dashboard', labelAr: 'نظرة عامة', labelEn: 'Overview', icon: LayoutDashboard },
+      { id: 'admin-dashboard', labelAr: 'صفحة الإدارة', labelEn: 'Administration', icon: LayoutDashboard },
       { id: 'teacher-dashboard', labelAr: 'لوحة المعلمين', labelEn: 'Teacher Workspace', icon: GraduationCap },
       { id: 'parent-portal', labelAr: 'بوابة الأولياء', labelEn: 'Parent Portal', icon: MessageSquare },
       { id: 'student-portal', labelAr: 'بوابة الطلاب', labelEn: 'Student Portal', icon: UserCheck },
